@@ -202,19 +202,10 @@ void SubghzApp_Init(void)
   Radio.SetChannel(RF_FREQUENCY);
 
   /* Radio configuration */
-#if ((USE_MODEM_LORA == 1) && (USE_MODEM_FSK == 0))
   APP_LOG(TS_OFF, VLEVEL_M, "---------------\n\r");
   APP_LOG(TS_OFF, VLEVEL_M, "LORA_MODULATION\n\r");
   APP_LOG(TS_OFF, VLEVEL_M, "LORA_BW=%d kHz\n\r", (1 << LORA_BANDWIDTH) * 125);
   APP_LOG(TS_OFF, VLEVEL_M, "LORA_SF=%d\n\r", LORA_SPREADING_FACTOR);
-#elif ((USE_MODEM_LORA == 0) && (USE_MODEM_FSK == 1))
-  APP_LOG(TS_OFF, VLEVEL_M, "---------------\n\r");
-  APP_LOG(TS_OFF, VLEVEL_M, "FSK_MODULATION\n\r");
-  APP_LOG(TS_OFF, VLEVEL_M, "FSK_BW=%d Hz\n\r", FSK_BANDWIDTH);
-  APP_LOG(TS_OFF, VLEVEL_M, "FSK_DR=%d bits/s\n\r", FSK_DATARATE);
-#else
-#error "Please define a modulation in the subghz_phy_app.h file."
-#endif /* USE_MODEM_LORA | USE_MODEM_FSK */
 
   /*fills tx buffer*/
   memset(BufferTx, 0x0, MAX_APP_BUFFER_SIZE);
@@ -250,15 +241,10 @@ static void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t LoraS
 {
   /* USER CODE BEGIN OnRxDone */
   APP_LOG(TS_ON, VLEVEL_L, "OnRxDone\n\r");
-#if ((USE_MODEM_LORA == 1) && (USE_MODEM_FSK == 0))
   APP_LOG(TS_ON, VLEVEL_L, "RssiValue=%d dBm, SnrValue=%ddB\n\r", rssi, LoraSnr_FskCfo);
   /* Record payload Signal to noise ratio in Lora*/
   SnrValue = LoraSnr_FskCfo;
-#endif /* USE_MODEM_LORA | USE_MODEM_FSK */
-#if ((USE_MODEM_LORA == 0) && (USE_MODEM_FSK == 1))
-  APP_LOG(TS_ON, VLEVEL_L, "RssiValue=%d dBm, Cfo=%dkHz\n\r", rssi, LoraSnr_FskCfo);
-  SnrValue = 0; /*not applicable in GFSK*/
-#endif /* USE_MODEM_LORA | USE_MODEM_FSK */
+
   /* Update the State of the FSM*/
   State = RX;
   /* Clear BufferRx*/
@@ -323,7 +309,6 @@ static void OnRxError(void)
 /* USER CODE BEGIN PrFD */
 static void RadioSend(void)
 {
-#if ((USE_MODEM_LORA == 1) && (USE_MODEM_FSK == 0))
   Radio.Sleep();
   Radio.SetChannel(RF_FREQUENCY);
   Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
@@ -331,22 +316,12 @@ static void RadioSend(void)
                     LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
                     true, 0, 0, LORA_IQ_INVERSION_ON, TX_TIMEOUT_VALUE);
   Radio.SetMaxPayloadLength(MODEM_LORA, MAX_APP_BUFFER_SIZE);
-#elif ((USE_MODEM_LORA == 0) && (USE_MODEM_FSK == 1))
-  Radio.SetTxConfig(MODEM_FSK, TX_OUTPUT_POWER, FSK_FDEV, 0,
-                    FSK_DATARATE, 0,
-                    FSK_PREAMBLE_LENGTH, FSK_FIX_LENGTH_PAYLOAD_ON,
-                    true, 0, 0, 0, TX_TIMEOUT_VALUE);
-  Radio.SetMaxPayloadLength(MODEM_FSK, MAX_APP_BUFFER_SIZE);
-#else
-#error "Please define a modulation in the subghz_phy_app.h file."
-#endif /* USE_MODEM_LORA | USE_MODEM_FSK */
 
   Radio.Send(BufferTx, PAYLOAD_LEN);
 }
 
 static void RadioRx(void)
 {
-#if ((USE_MODEM_LORA == 1) && (USE_MODEM_FSK == 0))
   Radio.Sleep();
   Radio.SetChannel(RF_FREQUENCY);
   Radio.SetRxConfig(MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
@@ -361,22 +336,6 @@ static void RadioRx(void)
   {
     Radio.SetMaxPayloadLength(MODEM_LORA, MAX_APP_BUFFER_SIZE);
   }
-#elif ((USE_MODEM_LORA == 0) && (USE_MODEM_FSK == 1))
-  Radio.SetRxConfig(MODEM_FSK, FSK_BANDWIDTH, FSK_DATARATE,
-                    0, FSK_AFC_BANDWIDTH, FSK_PREAMBLE_LENGTH,
-                    0, FSK_FIX_LENGTH_PAYLOAD_ON, 0, true,
-                    0, 0, false, true);
-  if (LORA_FIX_LENGTH_PAYLOAD_ON == true)
-  {
-    Radio.SetMaxPayloadLength(MODEM_FSK, PAYLOAD_LEN);
-  }
-  else
-  {
-    Radio.SetMaxPayloadLength(MODEM_FSK, MAX_APP_BUFFER_SIZE);
-  }
-#else
-#error "Please define a modulation in the subghz_phy_app.h file."
-#endif /* USE_MODEM_LORA | USE_MODEM_FSK */
 
   Radio.Rx(RX_TIMEOUT_VALUE);
 }
