@@ -1331,7 +1331,7 @@ static radio_status_t RadioSend( uint8_t *buffer, uint8_t size )
     }
     else
     {
-        SUBGRF_WriteRegister( SUBGHZ_SDCFG0R, SUBGRF_ReadRegister( SUBGHZ_SDCFG0R ) | ( 1 << 2 ) );
+        //SUBGRF_WriteRegister( SUBGHZ_SDCFG0R, SUBGRF_ReadRegister( SUBGHZ_SDCFG0R ) | ( 1 << 2 ) );
     }
 #if( RADIO_LR_FHSS_IS_ON == 1 )
     //ral_lr_fhss_memory_state_t lr_fhss_state = radio_board_get_lr_fhss_state_reference( );
@@ -2310,7 +2310,7 @@ static int32_t RadioSetTxGenericConfig( GenericModems_t modem, TxConfigGeneric_t
         else
         {
             // RegTxModulation = @address 0x0889
-            SUBGRF_WriteRegister( SUBGHZ_SDCFG0R, SUBGRF_ReadRegister( SUBGHZ_SDCFG0R ) | ( 1 << 2 ) );
+            //SUBGRF_WriteRegister( SUBGHZ_SDCFG0R, SUBGRF_ReadRegister( SUBGHZ_SDCFG0R ) | ( 1 << 2 ) );
         }
         /* WORKAROUND END */
         break;
