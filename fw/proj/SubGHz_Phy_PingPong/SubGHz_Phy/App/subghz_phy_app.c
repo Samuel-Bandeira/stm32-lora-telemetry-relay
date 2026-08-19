@@ -52,34 +52,34 @@ typedef enum
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define BOARD_TXx
-#define BOARD_RX
+typedef enum{
+	BOARD_NOT_DEFINED,
+	BOARD_RX,
+	BOARD_TX
+}board_type_t;
 
-#ifdef BOARD_TX
-#ifdef BOARD_RX
-#error "You can onyl define TX or RX"
-#endif
-#endif
-
+typedef enum{
+	SELECT_ROLE,
+	SELECT_BANDWITH,
+	CONFIG_DONE,
+}board_config_t;
 
 /* Configurations */
 /*Timeout*/
-#define RX_TIMEOUT_VALUE              3000
-#define TX_TIMEOUT_VALUE              3000
+#define RX_TIMEOUT_VALUE              7000
+#define TX_TIMEOUT_VALUE              5000
 /* PING string*/
 #define PING "PING"
 /* PONG string*/
 #define PONG "PONG"
 /*Size of the payload to be sent*/
 /* Size must be greater of equal the PING and PONG*/
-#define MAX_APP_BUFFER_SIZE          255
+#define MAX_APP_BUFFER_SIZE          50
 #if (PAYLOAD_LEN > MAX_APP_BUFFER_SIZE)
 #error PAYLOAD_LEN must be less or equal than MAX_APP_BUFFER_SIZE
 #endif /* (PAYLOAD_LEN > MAX_APP_BUFFER_SIZE) */
 /* wait for remote to be in Rx, before sending a Tx frame*/
 #define RX_TIME_MARGIN                200
-/* Afc bandwidth in Hz */
-#define FSK_AFC_BANDWIDTH             83333
 /* LED blink Period*/
 #define PROCESS_PERIOD_MS                 3000
 
@@ -108,9 +108,12 @@ int8_t RssiValue = 0;
 /* Last  Received packer SNR (in Lora modulation)*/
 int8_t SnrValue = 0;
 
-#ifdef BOARD_TX
+
+static board_type_t g_board_type = BOARD_NOT_DEFINED;
+static board_config_t g_board_config_state = SELECT_ROLE;
+static uint32_t g_bandwith_selector_ctn = 0;
 static UTIL_TIMER_Object_t process_timer;
-#endif
+
 
 
 
@@ -154,21 +157,24 @@ static void OnRxError(void);
 //static void PingPong_Process(void);
 
 static void tx_rx_process();
-#ifdef BOARD_TX
+
 static void tx_rx_process_timeout_cb(void* p_arg);
 static void RadioSend(void);
-#endif
+static void board_init();
+static void blink_led(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin,uint8_t blinks_ctn,uint32_t duration_ms);
+static void config_bandwith(uint8_t b1_input,uint8_t b3_input);
 
-#ifdef BOARD_RX
 /**
   * @brief PingPong RX configure and process
   */
 static void RadioRx(void);
-#endif
+
 
 /* USER CODE END PFP */
 
 /* Exported functions ---------------------------------------------------------*/
+
+
 void SubghzApp_Init(void)
 {
   /* USER CODE BEGIN SubghzApp_Init_1 */
@@ -186,11 +192,12 @@ void SubghzApp_Init(void)
           (uint8_t)(SUBGHZ_PHY_VERSION_SUB1),
           (uint8_t)(SUBGHZ_PHY_VERSION_SUB2));
 
-  /* Led Timers*/
-#ifdef BOARD_TX
-  UTIL_TIMER_Create(&process_timer, PROCESS_PERIOD_MS, UTIL_TIMER_PERIODIC, tx_rx_process_timeout_cb, NULL);
-  UTIL_TIMER_Start(&process_timer);
-#endif
+  board_init();
+
+  if(g_board_type == BOARD_TX){
+	  UTIL_TIMER_Create(&process_timer, PROCESS_PERIOD_MS, UTIL_TIMER_PERIODIC, tx_rx_process_timeout_cb, NULL);
+	  UTIL_TIMER_Start(&process_timer);
+  }
   /* USER CODE END SubghzApp_Init_1 */
 
   /* Radio initialization */
@@ -210,7 +217,7 @@ void SubghzApp_Init(void)
   /* Radio configuration */
   APP_LOG(TS_OFF, VLEVEL_M, "---------------\n\r");
   APP_LOG(TS_OFF, VLEVEL_M, "LORA_MODULATION\n\r");
-  APP_LOG(TS_OFF, VLEVEL_M, "LORA_BW=%d kHz\n\r", (1 << LORA_BANDWIDTH) * 125);
+  APP_LOG(TS_OFF, VLEVEL_M, "LORA_BW=%d kHz\n\r", (1 << g_bandwith_selector_ctn) * 125);
   APP_LOG(TS_OFF, VLEVEL_M, "LORA_SF=%d\n\r", LORA_SPREADING_FACTOR);
 
   /*fills tx buffer*/
@@ -232,11 +239,92 @@ void SubghzApp_Init(void)
 /* USER CODE END EF */
 
 /* Private functions ---------------------------------------------------------*/
-#ifdef BOARD_TX
+static void blink_led(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin,uint8_t blinks_ctn,uint32_t duration_ms){
+	for(uint8_t i=0;i<blinks_ctn;i++){
+		HAL_GPIO_WritePin(GPIOx, GPIO_Pin,GPIO_PIN_SET);
+		HAL_Delay(duration_ms);
+		HAL_GPIO_WritePin(GPIOx, GPIO_Pin,GPIO_PIN_RESET);
+		HAL_Delay(duration_ms);
+	}
+}
+
+static void config_role(uint8_t b1_input,uint8_t b2_input){
+	if(b1_input == 0){
+		APP_LOG(TS_ON, VLEVEL_L, "Board is TX\n\r");
+		g_board_type = BOARD_TX;
+		g_board_config_state = SELECT_BANDWITH;
+		if(g_board_type == BOARD_TX)blink_led(LED3_GPIO_Port, LED3_Pin,1,1000);/* LED_RED */
+		return;
+	}
+
+	if(b2_input == 0){
+		APP_LOG(TS_ON, VLEVEL_L, "Board is RX\n\r");
+		g_board_type = BOARD_RX;
+		g_board_config_state = SELECT_BANDWITH;
+		if(g_board_type == BOARD_RX)blink_led(LED2_GPIO_Port, LED2_Pin,1,1000);/* LED_GREEN */
+		return;
+	}
+}
+
+static void config_bandwith(uint8_t b1_input,uint8_t b3_input){
+	static uint8_t b3_last_state = 0;
+	static uint8_t first_cycle = 1;
+
+	if(b1_input == 0 && first_cycle == 0){
+		g_board_config_state = CONFIG_DONE;
+		if(g_board_type == BOARD_TX)blink_led(LED3_GPIO_Port, LED3_Pin,5,100);/* LED_RED */
+		if(g_board_type == BOARD_RX)blink_led(LED2_GPIO_Port, LED2_Pin,5,100);/* LED_GREEN */
+	}
+
+	if(b3_last_state != b3_input){
+		b3_last_state = b3_input;
+	}else{
+		return;
+	}
+
+	if(b3_input == 1)return;
+
+	g_bandwith_selector_ctn++;
+
+	if(first_cycle == 1){
+		first_cycle = 0;
+		g_bandwith_selector_ctn--;
+	}
+	if(g_bandwith_selector_ctn > 2)g_bandwith_selector_ctn = 0;
+
+	if(g_board_type == BOARD_TX)blink_led(LED3_GPIO_Port, LED3_Pin,g_bandwith_selector_ctn+1,300);/* LED_RED */
+	if(g_board_type == BOARD_RX)blink_led(LED2_GPIO_Port, LED2_Pin,g_bandwith_selector_ctn+1,300);/* LED_GREEN */
+}
+
+static void board_init(){
+	while(1){
+		uint8_t b1_input = HAL_GPIO_ReadPin(BUT1_GPIO_Port, BUT1_Pin);
+		uint8_t b2_input = HAL_GPIO_ReadPin(BUT2_GPIO_Port, BUT2_Pin);
+		uint8_t b3_input = HAL_GPIO_ReadPin(BUT3_GPIO_Port, BUT3_Pin);
+		HAL_Delay(100);
+
+		switch(g_board_config_state){
+		case SELECT_ROLE:
+			config_role(b1_input,b2_input);
+			break;
+
+		case SELECT_BANDWITH:
+			config_bandwith(b1_input,b3_input);
+			break;
+
+		case CONFIG_DONE:
+			return;
+		}
+
+	}
+}
+
+
+
 static void tx_rx_process_timeout_cb(void* p_arg){
 	UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_SubGHz_Phy_App_Process), CFG_SEQ_Prio_0);
 }
-#endif
+
 static void OnTxDone(void)
 {
   /* USER CODE BEGIN OnTxDone */
@@ -314,12 +402,12 @@ static void OnRxError(void)
 }
 
 /* USER CODE BEGIN PrFD */
-#ifdef BOARD_TX
+
 static void RadioSend(void)
 {
   Radio.Sleep();
   Radio.SetChannel(RF_FREQUENCY);
-  Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
+  Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, g_bandwith_selector_ctn,
                     LORA_SPREADING_FACTOR, LORA_CODINGRATE,
                     LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
                     true, 0, 0, LORA_IQ_INVERSION_ON, TX_TIMEOUT_VALUE);
@@ -327,14 +415,12 @@ static void RadioSend(void)
 
   Radio.Send(BufferTx, PAYLOAD_LEN);
 }
-#endif
 
-#ifdef BOARD_RX
 static void RadioRx(void)
 {
   Radio.Sleep();
   Radio.SetChannel(RF_FREQUENCY);
-  Radio.SetRxConfig(MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
+  Radio.SetRxConfig(MODEM_LORA, g_bandwith_selector_ctn, LORA_SPREADING_FACTOR,
                     LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
                     LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
                     0, true, 0, 0, LORA_IQ_INVERSION_ON, true);
@@ -349,51 +435,50 @@ static void RadioRx(void)
 
   Radio.Rx(RX_TIMEOUT_VALUE);
 }
-#endif
 
 static void tx_rx_process(){
-#ifdef BOARD_TX
-	Radio.Sleep();
+	if(g_board_type == BOARD_TX){
+		Radio.Sleep();
 
-    /* master toggles red led */
-    HAL_GPIO_TogglePin(LED3_GPIO_Port, LED3_Pin); /* LED_RED */
-    /* Add delay between RX and TX */
-    HAL_Delay(Radio.GetWakeupTime() + RX_TIME_MARGIN);
+		/* master toggles red led */
+		blink_led(LED3_GPIO_Port, LED3_Pin,1,150); /* LED_RED */
+		/* Add delay between RX and TX */
+		HAL_Delay(Radio.GetWakeupTime() + RX_TIME_MARGIN);
 
-    /* master sends PING*/
-	APP_LOG(TS_ON, VLEVEL_L, "..."
-			"PING"
-			"\n\r");
-	APP_LOG(TS_ON, VLEVEL_L, "Master Tx start\n\r");
-	memcpy(BufferTx, PING, sizeof(PING) - 1);
-	RadioSend();
-#endif
-
-#ifdef BOARD_RX
-	switch(State){
-	case RX_TIMEOUT:
-    case RX_ERROR:
-        APP_LOG(TS_ON, VLEVEL_L, "Slave Rx start\n\r");
-        RadioRx();
-        break;
-
-    case RX:
-		if (RxBufferSize > 0)
-		{
-		  if (strncmp((const char *)BufferRx, PING, sizeof(PING) - 1) == 0)
-		  {
-			HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin); /* LED_GREEN */
-			/* Add delay between RX and TX */
-			HAL_Delay(Radio.GetWakeupTime() + RX_TIME_MARGIN);
-		  }
-		}
-		RadioRx();
-		break;
-
-    default:
-    	break;
+		/* master sends PING*/
+		APP_LOG(TS_ON, VLEVEL_L, "..."
+				"PING"
+				"\n\r");
+		APP_LOG(TS_ON, VLEVEL_L, "Master Tx start\n\r");
+		memcpy(BufferTx, PING, sizeof(PING) - 1);
+		RadioSend();
 	}
-#endif
+
+	if(g_board_type == BOARD_RX){
+		switch(State){
+		case RX_TIMEOUT:
+		case RX_ERROR:
+			APP_LOG(TS_ON, VLEVEL_L, "Slave Rx start\n\r");
+			RadioRx();
+			break;
+
+		case RX:
+			if (RxBufferSize > 0)
+			{
+			  if (strncmp((const char *)BufferRx, PING, sizeof(PING) - 1) == 0)
+			  {
+				blink_led(LED2_GPIO_Port, LED2_Pin,1,150);/* LED_GREEN */
+				/* Add delay between RX and TX */
+				HAL_Delay(Radio.GetWakeupTime() + RX_TIME_MARGIN);
+			  }
+			}
+			RadioRx();
+			break;
+
+		default:
+			break;
+		}
+	}
 }
 
 //static void PingPong_Process(void)

@@ -62,7 +62,7 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : BUT1_Pin BUT2_Pin */
   GPIO_InitStruct.Pin = BUT1_Pin|BUT2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -75,7 +75,7 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : BUT3_Pin */
   GPIO_InitStruct.Pin = BUT3_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(BUT3_GPIO_Port, &GPIO_InitStruct);
 

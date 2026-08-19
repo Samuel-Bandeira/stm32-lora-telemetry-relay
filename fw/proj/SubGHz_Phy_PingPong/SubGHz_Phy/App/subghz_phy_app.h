@@ -43,7 +43,7 @@ extern "C" {
 #define TX_OUTPUT_POWER                             22        /* dBm */
 #endif /* TX_OUTPUT_POWER */
 
-#define LORA_BANDWIDTH                              0         /* [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved] */
+//#define LORA_BANDWIDTH                              0         /* [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved] */
 #define LORA_SPREADING_FACTOR                       12         /* [SF7..SF12] */
 #define LORA_CODINGRATE                             4         /* [1: 4/5, 2: 4/6, 3: 4/7, 4: 4/8] */
 #define LORA_PREAMBLE_LENGTH                        8         /* Same for Tx and Rx */
@@ -51,7 +51,7 @@ extern "C" {
 #define LORA_FIX_LENGTH_PAYLOAD_ON                  false
 #define LORA_IQ_INVERSION_ON                        false
 
-#define PAYLOAD_LEN                                 64
+#define PAYLOAD_LEN                                 30
 
 /* USER CODE BEGIN EC */
 
